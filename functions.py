@@ -29,7 +29,16 @@ def list_session_id():
         df_user_session.to_excel("%s_session_id.xlsx" % username, index=False) # save the dataframe to a excel file
         return df_user_session
 
-
+    """
+    Regex Description:
+    
+    \d matches a digit (equivalent to [0-9])
+    {4} matches the previous token exactly 4 times
+    so any 4 digit year is recognizable!
+    - matches a hyphen
+    (0[1-9]|1[0-2]) matches a month
+    (0[1-9]|[12][0-9]|3[01]) matches a day
+    """
 def list_login_time():
     username = input("Enter username: ")
     print("Prosessing...\n")
@@ -38,22 +47,50 @@ def list_login_time():
         print("\nThe user %s does not exist." % username)
         return
     else:
-        regex = re.compile(r'\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])')  # create a regex to find the time
-        print("\nSet a date range following the format: YYYY-MM-DD")
-        start_date = input("Enter the start date: ")
-        end_date = input("Enter the end date: ")
-      
-        if regex.fullmatch(start_date) and regex.fullmatch(end_date):
-            df_loc = df.loc[:,["Usuario", "Inicio de Conexion"]]
-            df_loc['dates'] = df_loc['Inicio de Conexion'].dt.normalize()
-            df_date_colum = df_loc.loc[:,["Usuario", "dates"]]
-            df_date_colum.sort_values(by=['dates'])
-            df_date_range = df_date_colum['dates'].between(start_date, end_date)
-            True_Count = df_date_range[df_date_range == True].count()
-            print("\nThe user %s has %s sessions between %s and %s" % (username, True_Count, start_date, end_date))
-            return True_Count
+        regex_date = re.compile(r'\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])')  # create a regex to find the time
+        opt = input("\nDo you want a specific date or a range of dates?\n1. Specific date\n2. Range of dates\n")
+        if opt == "1":
+            print("\nSet a date following the format: YYYY-MM-DD")
+            date = input("Enter the date: ")
+            if regex_date.fullmatch(date):
+                df_loc = df.loc[:,["Usuario", "Inicio de Conexion"]]
+                df_loc['dates'] = df_loc['Inicio de Conexion'].dt.normalize()
+                df_date_colum = df_loc.loc[:,["Usuario", "dates"]]
+                df_date_colum.sort_values(by=['dates'])
+                df_date_colum.query('dates == @date', inplace=True)
+                row_count = df_date_colum.shape[0]
+                if row_count == 0:
+                    print("\nThe user %s has not logged in on %s" % (username, date))
+                    return
+                else:
+                    print("\nThe user %s has logged in %d times on %s" % (username, row_count, date))
+                    
+            else:
+                print("\nThe date is not in the correct format.")
+                return
+        elif opt == "2":
+            print("\nSet a date range following the format: YYYY-MM-DD")
+            start_date = input("Enter the start date: ")
+            end_date = input("Enter the end date: ")
+        
+            if regex_date.fullmatch(start_date) and regex_date.fullmatch(end_date):
+                df_loc = df.loc[:,["Usuario", "Inicio de Conexion"]]
+                df_loc['dates'] = df_loc['Inicio de Conexion'].dt.normalize()
+                df_date_colum = df_loc.loc[:,["Usuario", "dates"]]
+                df_date_colum.sort_values(by=['dates'])
+                df_date_range = df_date_colum['dates'].between(start_date, end_date)
+                True_count = df_date_range[df_date_range == True].count()
+                if True_count == 0:
+                    print("\nThe user %s has not logged in on %s" % (username, start_date))
+                    return
+                else:
+                    print("\nThe user %s has logged in %s times between %s and %s" % (username, True_count, start_date, end_date))
+                    return True_count
+            else:
+                print("\nThe date is not in the correct format.")
+                return
         else:
-            print("\nThe date is not in the correct format.")
+            print("\nThe option is not valid.")
             return
         
 
@@ -80,6 +117,7 @@ def list_user_macs():
         print("\nThe user %s does not exist." % username)
         return
     else:
+        
         df_loc = df_username.loc[:,["Usuario", "MAC Cliente"]]
         df_mac_user = df_loc.groupby(['Usuario', 'MAC Cliente']).size().reset_index(name='Number of times used')
         mac_user_serted = df_mac_user.sort_values(by=['Number of times used'], ascending=False)
@@ -115,11 +153,15 @@ def user_conected_ap():
                     df_date_colum = df_date.loc[:,["MAC AP", "Usuario", "MAC Cliente", "dates"]]
                     df_date_colum.sort_values(by=['dates'])
                     df_date_colum.query('dates == @date', inplace=True)
-                    df_date_colum.reset_index(inplace=True, drop=True)
-                    print("\n", df_date_colum)
-                    df_date_colum.to_csv("%s_conection_in_%s.csv" % (mac_ap, date), index=False)
+                    df_users = df_date_colum.loc[:,["Usuario"]]
+                    dups = df_users.pivot_table(index = ['Usuario'], aggfunc ='size')
+                    df_dups = pd.DataFrame({"Usuario": dups.index, "Number of sessions": dups.values})
+                    df_dups.sort_values(by=['Number of sessions'], ascending=False, inplace=True)
+                    df_dups.reset_index(inplace=True, drop=True)
+                    print("\n", dups)
+                    df_dups.to_csv("%s_conection_in_%s.csv" % (mac_ap, date), index=False)
                     print("\n", "The file %s_conection_in_%s.csv has been created to see more details." % (mac_ap, date))
-                    return df_date_colum
+                    return df_dups
                 else:
                     print("\nThe date is not in the correct format.")
                     return
@@ -138,11 +180,15 @@ def user_conected_ap():
                     else:
                         df_date_range = df_date_colum['dates'].between(start_date, end_date)
                         df_date_colum = df_date_colum[df_date_range]
-                        df_date_colum.reset_index(inplace=True, drop=True)
-                        print("\n", df_date_colum)
-                        df_date_colum.to_csv("%s_conection_in_%s_to_%s.csv" % (mac_ap, start_date, end_date), index=False)
+                        df_users = df_date_colum.loc[:,["Usuario"]]
+                        dups = df_users.pivot_table(index = ['Usuario'], aggfunc ='size')
+                        df_dups = pd.DataFrame({"Usuario": dups.index, "Number of sessions": dups.values})
+                        df_dups.sort_values(by=['Number of sessions'], ascending=False, inplace=True)
+                        df_dups.reset_index(inplace=True, drop=True)
+                        print("\n", dups)
+                        df_dups.to_csv("%s_conection_in_%s_to_%s.csv" % (mac_ap, start_date, end_date), index=False)
                         print("\n", "The file %s_conection_in_%s_to_%s.csv has been created to see more details." % (mac_ap, start_date, end_date))
-                        return df_date_colum
+                        return df_dups
                 else:
                     print("\nThe date is not in the correct format.")
                     return
